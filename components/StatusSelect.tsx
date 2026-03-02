@@ -70,7 +70,7 @@ export default function StatusSelect({
           ? t('not_reached_when_done')
           : value !== 'new'
             ? t('status_new_disabled')
-            : value !== 'not_reached' && notReachedBlocked
+            : notReachedBlocked
               ? t('not_reached_wait')
               : undefined
       }
