@@ -33,6 +33,19 @@ export default function AuthGuard() {
           <p className="text-gray-400 text-sm">
             {t('access_denied_your_email')}: <span className="text-gray-300">{user.email ?? user.id}</span>
           </p>
+          <p className="text-amber-400/90 text-sm font-medium">
+            {t('sign_out_and_login')}
+          </p>
+          <button
+            type="button"
+            onClick={() => signOut()}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-lg bg-amber-600 text-white hover:bg-amber-500 text-sm font-medium"
+          >
+            {t('sign_out_and_login')}
+          </button>
+          <p className="text-gray-400 text-sm text-left border-t border-gray-700 pt-4 mt-2">
+            {t('access_denied_steps')}
+          </p>
           <p className="text-gray-400 text-sm text-left">{t('access_denied_help')}</p>
           <pre className="text-left text-xs text-gray-300 bg-[#161b22] border border-gray-700 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all">
             {sql}
@@ -54,13 +67,6 @@ export default function AuthGuard() {
               className="px-4 py-2 rounded-lg bg-gray-600 text-white hover:bg-gray-500 text-sm"
             >
               {t('refresh_after_sql')}
-            </button>
-            <button
-              type="button"
-              onClick={() => signOut()}
-              className="px-4 py-2 rounded-lg bg-gray-700 text-gray-200 hover:bg-gray-600 text-sm"
-            >
-              {t('sign_out')}
             </button>
           </div>
         </div>

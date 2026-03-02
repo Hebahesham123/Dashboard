@@ -62,26 +62,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       const p = await fetchOrCreateProfile(session.user.id, session.user.email ?? '')
       if (!cancelled) setProfile(p)
-      if (!cancelled) setLoading(false)
     })
 
+    // Show login (or next screen) as soon as we know the session — don't wait for profile
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (cancelled) return
       setUser(session?.user ?? null)
-      if (!session?.user) {
-        setLoading(false)
-        return
+      setLoading(false)
+      if (session?.user) {
+        fetchOrCreateProfile(session.user.id, session.user.email ?? '').then((p) => {
+          if (!cancelled) setProfile(p)
+        })
       }
-      fetchOrCreateProfile(session.user.id, session.user.email ?? '').then((p) => {
-        if (!cancelled) setProfile(p)
-      }).finally(() => {
-        if (!cancelled) setLoading(false)
-      })
     })
 
+    // If getSession() hangs (e.g. network), show login after 3 seconds
     const safetyTimeout = setTimeout(() => {
       setLoading((prev) => (prev ? false : prev))
-    }, 10000)
+    }, 3000)
 
     return () => {
       cancelled = true
