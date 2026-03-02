@@ -8,6 +8,7 @@ type AuthContextValue = {
   user: User | null
   profile: Profile | null
   loading: boolean
+  profileChecked: boolean
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   hasAccess: boolean
@@ -22,6 +23,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [profileChecked, setProfileChecked] = useState(false)
 
   const fetchOrCreateProfile = useCallback(async (uid: string, email: string): Promise<Profile | null> => {
     const { data: existing, error: selectError } = await supabase
@@ -57,29 +59,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session?.user ?? null)
       if (!session?.user) {
         setProfile(null)
+        setProfileChecked(true)
         setLoading(false)
         return
       }
+      setProfileChecked(false)
       const p = await fetchOrCreateProfile(session.user.id, session.user.email ?? '')
-      if (!cancelled) setProfile(p)
-    })
-
-    // Show login (or next screen) as soon as we know the session — don't wait for profile
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (cancelled) return
-      setUser(session?.user ?? null)
-      setLoading(false)
-      if (session?.user) {
-        fetchOrCreateProfile(session.user.id, session.user.email ?? '').then((p) => {
-          if (!cancelled) setProfile(p)
-        })
+      if (!cancelled) {
+        setProfile(p)
+        setProfileChecked(true)
       }
     })
 
-    // If getSession() hangs (e.g. network), show login after 3 seconds
+    // When we have a session, wait for profile fetch before showing UI (so we don't sign out on refresh before profile loads)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (cancelled) return
+      setUser(session?.user ?? null)
+      if (!session?.user) {
+        setProfileChecked(true)
+        setLoading(false)
+        return
+      }
+      setProfileChecked(false)
+      let profileTimeout: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+        profileTimeout = null
+        if (!cancelled) {
+          setProfileChecked(true)
+          setLoading(false)
+        }
+      }, 5000)
+      fetchOrCreateProfile(session.user.id, session.user.email ?? '').then((p) => {
+        if (cancelled) return
+        if (profileTimeout) clearTimeout(profileTimeout)
+        setProfile(p)
+        setProfileChecked(true)
+        setLoading(false)
+      })
+    })
+
+    // If getSession() hangs (e.g. network), show login after 4 seconds
     const safetyTimeout = setTimeout(() => {
       setLoading((prev) => (prev ? false : prev))
-    }, 3000)
+    }, 4000)
 
     return () => {
       cancelled = true
@@ -104,9 +125,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut()
     setUser(null)
     setProfile(null)
+    setProfileChecked(false)
+    supabase.auth.signOut().catch(() => {})
   }, [])
 
   const hasAccess = !!profile && ALLOWED_ROLES.includes(profile.role)
@@ -116,11 +138,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true)
     const p = await fetchOrCreateProfile(user.id, user.email ?? '')
     setProfile(p)
+    setProfileChecked(true)
     setLoading(false)
   }, [user, fetchOrCreateProfile])
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, hasAccess, retryProfileFetch }}>
+    <AuthContext.Provider value={{ user, profile, loading, profileChecked, signIn, signOut, hasAccess, retryProfileFetch }}>
       {children}
     </AuthContext.Provider>
   )
