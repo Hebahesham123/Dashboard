@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #0c0f14;
+  --bg-secondary: #13171f;
+  --bg-tertiary: #1a1f2a;
+  --bg-card: #161b24;
+  --border: #252b36;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-muted: #6e7681;
+  --accent: #58a6ff;
+  --accent-dim: rgba(88, 166, 255, 0.15);
+  --success: #3fb950;
+  --success-dim: rgba(63, 185, 80, 0.15);
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+/* Table row clickable */
+.table-row-clickable {
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.table-row-clickable:hover {
+  background: rgba(88, 166, 255, 0.08);
+}
+.table-row-clickable.new-row {
+  animation: highlightRow 1.5s ease-out;
+}
+@keyframes highlightRow {
+  0% { background: var(--success-dim); }
+  100% { background: transparent; }
+}
+
+/* Modal overlay */
+.modal-overlay {
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+}
+
+/* Detail panel slide-in */
+.detail-panel {
+  animation: slideIn 0.25s ease-out;
+}
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.toast-enter {
+  animation: toastEnter 0.3s ease-out;
+}
+@keyframes toastEnter {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Dropdown options: dark text on light background so they are readable */
+select option {
+  background: #ffffff;
+  color: #1f2937;
+}
