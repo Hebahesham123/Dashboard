@@ -1,8 +1,10 @@
 'use client'
 
-import type { SampleInquiry } from '@/lib/supabase'
+import type { SampleInquiry, SubmissionStatus } from '@/lib/supabase'
 import { useLocale } from './LocaleContext'
 import StatusSelect from './StatusSelect'
+import RequestedSamplesCell from './RequestedSamplesCell'
+import CommentCell from './CommentCell'
 
 function formatDate(val: string | null, locale: string) {
   if (!val) return '—'
@@ -13,8 +15,11 @@ function formatDate(val: string | null, locale: string) {
 
 export default function SubmissionsTable({
   submissions,
+  pendingStatus = {},
   onSelect,
-  onStatusChange,
+  onStatusDraft,
+  onStatusSave,
+  onCommentChange,
   sortOrder,
   onSortChange,
   limit,
@@ -25,8 +30,11 @@ export default function SubmissionsTable({
   selectedId,
 }: {
   submissions: SampleInquiry[]
+  pendingStatus?: Record<string, SubmissionStatus>
   onSelect: (row: SampleInquiry) => void
-  onStatusChange: (id: string, status: import('@/lib/supabase').SubmissionStatus) => void
+  onStatusDraft: (id: string, status: SubmissionStatus) => void
+  onStatusSave: (id: string) => void
+  onCommentChange: (id: string, comment: string | null) => void
   sortOrder: 'desc' | 'asc'
   onSortChange: (order: 'desc' | 'asc') => void
   limit: number
@@ -102,7 +110,9 @@ export default function SubmissionsTable({
                 <th className="text-left py-2.5 px-3 text-xs font-medium text-gray-500">{t('date')}</th>
                 <th className="text-left py-2.5 px-3 text-xs font-medium text-gray-500">{t('name')}</th>
                 <th className="text-left py-2.5 px-3 text-xs font-medium text-gray-500 hidden sm:table-cell">{t('phone')}</th>
+                <th className="text-left py-2.5 px-3 text-xs font-medium text-gray-500">{t('requested_samples')}</th>
                 <th className="text-left py-2.5 px-3 text-xs font-medium text-gray-500">{t('status')}</th>
+                <th className="text-left py-2.5 px-3 text-xs font-medium text-gray-500 min-w-[120px]">{t('comment')}</th>
                 <th className="text-left py-2.5 px-3 text-xs font-medium text-gray-500 w-16" />
               </tr>
             </thead>
@@ -118,11 +128,35 @@ export default function SubmissionsTable({
                   </td>
                   <td className="py-2.5 px-3 font-medium text-gray-200">{row.name ?? '—'}</td>
                   <td className="py-2.5 px-3 text-gray-400 hidden sm:table-cell">{row.phone ?? '—'}</td>
-                  <td className="py-2.5 px-3" onClick={(e) => e.stopPropagation()}>
-                    <StatusSelect
-                      submission={row}
-                      onStatusChange={onStatusChange}
-                      size="sm"
+                  <td className="py-2.5 px-3 max-w-[160px]" onClick={(e) => e.stopPropagation()}>
+                    <RequestedSamplesCell value={row.requested_samples} />
+                  </td>
+                  <td className="py-2.5 px-3 align-middle" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <StatusSelect
+                        submission={{ ...row, status: pendingStatus[row.id] ?? row.status ?? 'new' }}
+                        onStatusChange={onStatusDraft}
+                        size="sm"
+                      />
+                      {(pendingStatus[row.id] !== undefined && pendingStatus[row.id] !== (row.status ?? 'new')) && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onStatusSave(row.id)
+                          }}
+                          className="px-2 py-1 rounded text-xs font-medium bg-blue-600 text-white hover:bg-blue-500 shrink-0"
+                        >
+                          {t('save')}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-2.5 px-3 align-top" onClick={(e) => e.stopPropagation()}>
+                    <CommentCell
+                      id={row.id}
+                      comment={row.comment ?? null}
+                      onBlur={onCommentChange}
                     />
                   </td>
                   <td className="py-2.5 px-3">

@@ -1,10 +1,13 @@
+import { AuthProvider } from '@/components/AuthContext'
 import { LocaleProvider } from '@/components/LocaleContext'
-import Dashboard from '@/components/Dashboard'
+import AuthGuard from '@/components/AuthGuard'
 
 export default function Home() {
   return (
-    <LocaleProvider>
-      <Dashboard />
-    </LocaleProvider>
+    <AuthProvider>
+      <LocaleProvider>
+        <AuthGuard />
+      </LocaleProvider>
+    </AuthProvider>
   )
 }

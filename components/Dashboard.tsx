@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { supabase, TABLE_NAME, CREATED_AT_COLUMN, type SampleInquiry, type SubmissionStatus } from '@/lib/supabase'
+import { supabase, TABLE_NAME, CREATED_AT_COLUMN, ACTIVITY_TABLE, NOT_REACHED_COOLDOWN_MS, type SampleInquiry, type SubmissionStatus, type Profile } from '@/lib/supabase'
 import { useLocale } from './LocaleContext'
+import { useAuth } from './AuthContext'
 import StatsCards from './StatsCards'
 import SubmissionsTable from './SubmissionsTable'
 import SubmissionDetail from './SubmissionDetail'
@@ -25,8 +26,9 @@ function getTodayAndWeek(submissions: SampleInquiry[]) {
   return { today, week }
 }
 
-export default function Dashboard() {
+export default function Dashboard({ profile }: { profile: Profile }) {
   const { t, locale, setLocale, dir } = useLocale()
+  const { signOut } = useAuth()
   const [submissions, setSubmissions] = useState<SampleInquiry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -35,6 +37,7 @@ export default function Dashboard() {
   const [limit, setLimit] = useState(25)
   const [searchQuery, setSearchQuery] = useState('')
   const [toast, setToast] = useState<string | null>(null)
+  const [pendingStatus, setPendingStatus] = useState<Record<string, SubmissionStatus>>({})
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -55,18 +58,112 @@ export default function Dashboard() {
     fetchData()
   }, [fetchData])
 
-  const updateStatus = useCallback(async (id: string, status: SubmissionStatus) => {
-    const { error: e } = await supabase.from(TABLE_NAME).update({ status }).eq('id', id)
-    if (e) {
-      setToast(t('failed_to_update_status'))
-      setTimeout(() => setToast(null), 3000)
-      return
-    }
-    setSubmissions((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, status } : s))
-    )
-    if (selected?.id === id) setSelected((s) => (s ? { ...s, status } : null))
-  }, [selected?.id, t])
+  const logActivity = useCallback(
+    async (inquiryId: string, action: string, details: string | null) => {
+      await supabase.from(ACTIVITY_TABLE).insert({
+        sample_inquiry_id: inquiryId,
+        user_id: profile.user_id,
+        user_email: profile.email,
+        action,
+        details,
+      })
+    },
+    [profile.user_id, profile.email]
+  )
+
+  const updateStatus = useCallback(
+    async (id: string, status: SubmissionStatus) => {
+      const sub = submissions.find((s) => s.id === id)
+      const oldStatus = sub?.status ?? 'new'
+
+      if (status === 'not_reached' && oldStatus === 'done') {
+        setToast(t('not_reached_when_done'))
+        setTimeout(() => setToast(null), 4000)
+        return
+      }
+      if (status === 'not_reached') {
+        const lastAt = sub?.not_reached_last_at ? new Date(sub.not_reached_last_at).getTime() : 0
+        const now = Date.now()
+        if (lastAt && now - lastAt < NOT_REACHED_COOLDOWN_MS) {
+          setToast(t('not_reached_wait'))
+          setTimeout(() => setToast(null), 4000)
+          return
+        }
+      }
+
+      const payload: Record<string, unknown> = { status }
+      if (status === 'not_reached') {
+        payload.not_reached_count = (sub?.not_reached_count ?? 0) + 1
+        payload.not_reached_last_at = new Date().toISOString()
+      }
+
+      const { error: e } = await supabase.from(TABLE_NAME).update(payload).eq('id', id)
+      if (e) {
+        setToast(t('failed_to_update_status'))
+        setTimeout(() => setToast(null), 3000)
+        return
+      }
+      await logActivity(id, 'status_update', `${oldStatus} → ${status}`)
+      const nextCount = status === 'not_reached' ? (sub?.not_reached_count ?? 0) + 1 : sub?.not_reached_count
+      const nextLastAt = status === 'not_reached' ? new Date().toISOString() : sub?.not_reached_last_at
+      setSubmissions((prev) =>
+        prev.map((s) =>
+          s.id === id
+            ? { ...s, status, not_reached_count: nextCount, not_reached_last_at: nextLastAt }
+            : s
+        )
+      )
+      if (selected?.id === id)
+        setSelected((s) =>
+          s ? { ...s, status, not_reached_count: nextCount, not_reached_last_at: nextLastAt } : null
+        )
+    },
+    [selected?.id, t, submissions, logActivity]
+  )
+
+  const onStatusDraft = useCallback((id: string, status: SubmissionStatus) => {
+    setPendingStatus((prev) => ({ ...prev, [id]: status }))
+  }, [])
+
+  const onStatusSave = useCallback(
+    async (id: string) => {
+      const sub = submissions.find((s) => s.id === id)
+      const savedStatus = sub?.status ?? 'new'
+      const statusToSave = pendingStatus[id] ?? savedStatus
+      if (statusToSave === savedStatus) {
+        setPendingStatus((prev) => {
+          const next = { ...prev }
+          delete next[id]
+          return next
+        })
+        return
+      }
+      await updateStatus(id, statusToSave)
+      setPendingStatus((prev) => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+    },
+    [submissions, pendingStatus, updateStatus]
+  )
+
+  const updateComment = useCallback(
+    async (id: string, comment: string | null) => {
+      const { error: e } = await supabase.from(TABLE_NAME).update({ comment: comment || null }).eq('id', id)
+      if (e) {
+        setToast(t('failed_to_update_status'))
+        setTimeout(() => setToast(null), 3000)
+        return
+      }
+      await logActivity(id, 'comment_update', comment ? comment.slice(0, 200) : null)
+      setSubmissions((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, comment: comment || null } : s))
+      )
+      if (selected?.id === id) setSelected((s) => (s ? { ...s, comment: comment || null } : null))
+    },
+    [selected?.id, t, logActivity]
+  )
 
   useEffect(() => {
     const channel = supabase
@@ -128,7 +225,13 @@ export default function Dashboard() {
             <h1 className="text-xl font-semibold">{t('title')}</h1>
             <p className="text-sm text-gray-500 mt-0.5">{t('subtitle')}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-xs text-gray-500 hidden sm:inline">
+              {profile.email}
+              <span className="ml-2 px-1.5 py-0.5 rounded bg-gray-700 text-gray-300 text-xs font-medium">
+                {profile.role === 'admin' ? t('role_admin') : t('role_call_center')}
+              </span>
+            </span>
             <button
               type="button"
               onClick={() => setLocale(locale === 'ar' ? 'en' : 'ar')}
@@ -147,6 +250,13 @@ export default function Dashboard() {
               </svg>
               {t('refresh')}
             </button>
+            <button
+              type="button"
+              onClick={() => signOut()}
+              className="text-sm text-gray-400 hover:text-white"
+            >
+              {t('sign_out')}
+            </button>
           </div>
         </div>
       </header>
@@ -155,8 +265,11 @@ export default function Dashboard() {
         <StatsCards total={submissions.length} today={today} week={week} />
         <SubmissionsTable
           submissions={submissions}
+          pendingStatus={pendingStatus}
           onSelect={setSelected}
-          onStatusChange={updateStatus}
+          onStatusDraft={onStatusDraft}
+          onStatusSave={onStatusSave}
+          onCommentChange={updateComment}
           sortOrder={sortOrder}
           onSortChange={setSortOrder}
           limit={limit}
@@ -172,7 +285,15 @@ export default function Dashboard() {
         <SubmissionDetail
           submission={selected}
           onClose={() => setSelected(null)}
-          onStatusChange={updateStatus}
+          onStatusChange={(id, status) => {
+            updateStatus(id, status)
+            setPendingStatus((prev) => {
+              const next = { ...prev }
+              delete next[id]
+              return next
+            })
+          }}
+          onCommentChange={updateComment}
         />
       )}
 
