@@ -50,7 +50,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (cancelled) return
       setUser(session?.user ?? null)
       if (!session?.user) {
         setProfile(null)
@@ -58,20 +61,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return
       }
       const p = await fetchOrCreateProfile(session.user.id, session.user.email ?? '')
-      setProfile(p)
-      setLoading(false)
+      if (!cancelled) setProfile(p)
+      if (!cancelled) setLoading(false)
     })
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (cancelled) return
       setUser(session?.user ?? null)
       if (!session?.user) {
         setLoading(false)
         return
       }
-      fetchOrCreateProfile(session.user.id, session.user.email ?? '').then(setProfile).finally(() => setLoading(false))
+      fetchOrCreateProfile(session.user.id, session.user.email ?? '').then((p) => {
+        if (!cancelled) setProfile(p)
+      }).finally(() => {
+        if (!cancelled) setLoading(false)
+      })
     })
 
-    return () => subscription.unsubscribe()
+    const safetyTimeout = setTimeout(() => {
+      setLoading((prev) => (prev ? false : prev))
+    }, 10000)
+
+    return () => {
+      cancelled = true
+      clearTimeout(safetyTimeout)
+      subscription.unsubscribe()
+    }
   }, [fetchOrCreateProfile])
 
   useEffect(() => {
