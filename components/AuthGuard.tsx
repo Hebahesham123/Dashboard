@@ -3,11 +3,10 @@
 import { useEffect, useRef } from 'react'
 import { useAuth } from './AuthContext'
 import { useLocale } from './LocaleContext'
-import LoginForm from './LoginForm'
 import Dashboard from './Dashboard'
 
 export default function AuthGuard() {
-  const { user, profile, loading, profileChecked, signOut, hasAccess, retryProfileFetch } = useAuth()
+  const { user, profile, loading, profileChecked, signOut, hasAccess, retryProfileFetch, autoSignIn } = useAuth()
   const { t, dir } = useLocale()
   const signOutDone = useRef(false)
 
@@ -35,7 +34,20 @@ export default function AuthGuard() {
   }
 
   if (!user) {
-    return <LoginForm />
+    return (
+      <div className="min-h-screen bg-[#0d1117] flex items-center justify-center" dir={dir}>
+        <div className="flex flex-col items-center gap-4 text-gray-300 max-w-sm text-center">
+          <p className="text-sm">{t('dashboard_auto_signin_help')}</p>
+          <button
+            type="button"
+            onClick={() => autoSignIn()}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm text-white"
+          >
+            {t('retry')}
+          </button>
+        </div>
+      </div>
+    )
   }
 
   if (!profileChecked) {
@@ -54,7 +66,7 @@ export default function AuthGuard() {
     if (profile === null) {
       return (
         <div className="min-h-screen bg-[#0d1117] flex items-center justify-center" dir={dir}>
-          <div className="flex flex-col items-center gap-4 text-gray-300">
+          <div className="flex flex-col items-center gap-4 text-gray-300 max-w-md text-center px-4">
             <p className="text-sm">{t('profile_load_failed')}</p>
             <button
               type="button"
@@ -63,6 +75,7 @@ export default function AuthGuard() {
             >
               {t('retry')}
             </button>
+            <p className="text-xs text-gray-500 mt-2">{t('profile_load_failed_hint')}</p>
           </div>
         </div>
       )

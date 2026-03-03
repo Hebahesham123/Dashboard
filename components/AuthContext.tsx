@@ -12,10 +12,10 @@ type AuthContextValue = {
   profile: Profile | null
   loading: boolean
   profileChecked: boolean
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   hasAccess: boolean
   retryProfileFetch: () => Promise<void>
+  autoSignIn: () => Promise<boolean>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -38,7 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .maybeSingle()
 
     if (selectError) {
-      console.error('Profile select failed:', selectError.message)
+      console.error('Profile select failed:', selectError.message, selectError)
       return null
     }
     if (existing) return existing as Profile
@@ -50,7 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .single()
 
     if (insertError) {
-      console.error('Profile insert failed:', insertError.message)
+      console.error('Profile insert failed:', insertError.message, insertError)
       return null
     }
     return inserted as Profile
@@ -67,6 +67,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(t)
   }, [])
 
+  // Auto sign-in: no login screen — use env credentials when there's no session
+  const autoSignIn = useCallback(async () => {
+    const email = process.env.NEXT_PUBLIC_DASHBOARD_EMAIL
+    const password = process.env.NEXT_PUBLIC_DASHBOARD_PASSWORD
+    if (!email || !password) return false
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    return !error
+  }, [])
+
   // Single source of truth: only onAuthStateChange (no getSession()) to avoid auth lock contention
   useEffect(() => {
     let cancelled = false
@@ -77,7 +86,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!session?.user) {
         setProfile(null)
         setProfileChecked(true)
-        setLoading(false)
+        const ok = await autoSignIn()
+        if (!cancelled && !ok) setLoading(false)
         return
       }
       setProfileChecked(false)
@@ -90,10 +100,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false)
       }, PROFILE_FETCH_TIMEOUT_MS)
       try {
-        // Brief delay so Supabase client has the new session before RLS runs
-        await new Promise((r) => setTimeout(r, 150))
+        // Wait for session to be applied so RLS allows profile read/insert
+        await new Promise((r) => setTimeout(r, 400))
         if (cancelled) return
-        const p = await fetchOrCreateProfile(session.user.id, session.user.email ?? '')
+        let p = await fetchOrCreateProfile(session.user.id, session.user.email ?? '')
+        if (p == null && !cancelled && !done) {
+          await new Promise((r) => setTimeout(r, 800))
+          if (cancelled) return
+          p = await fetchOrCreateProfile(session.user.id, session.user.email ?? '')
+        }
         if (cancelled) return
         if (!done) {
           done = true
@@ -116,7 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       cancelled = true
       subscription.unsubscribe()
     }
-  }, [fetchOrCreateProfile])
+  }, [fetchOrCreateProfile, autoSignIn])
 
   useEffect(() => {
     if (loading || !user || profile) return
@@ -127,11 +142,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, 2000)
     return () => clearTimeout(t)
   }, [loading, user, profile, fetchOrCreateProfile])
-
-  const signIn = useCallback(async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    return { error: error?.message ?? null }
-  }, [])
 
   const signOut = useCallback(async () => {
     setUser(null)
@@ -152,7 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, fetchOrCreateProfile])
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, profileChecked, signIn, signOut, hasAccess, retryProfileFetch }}>
+    <AuthContext.Provider value={{ user, profile, loading, profileChecked, signOut, hasAccess, retryProfileFetch, autoSignIn }}>
       {children}
     </AuthContext.Provider>
   )
