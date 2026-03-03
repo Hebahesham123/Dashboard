@@ -51,12 +51,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Trigger on auth.users (requires superuser or use Supabase Dashboard -> Database -> Webhooks)
--- If you use Supabase Auth UI or signUp(), add this trigger in SQL Editor (may need to run as postgres):
--- DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
--- CREATE TRIGGER on_auth_user_created
---   AFTER INSERT ON auth.users
---   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+-- Optional: new users get a profile automatically (if this fails, run supabase-bootstrap-profiles.sql after adding users)
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- 7. Make a user admin (run after first signup; replace with the user's email)
 -- UPDATE profiles SET role = 'admin' WHERE email = 'your-admin@example.com';

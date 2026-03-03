@@ -4,18 +4,21 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef } f
 import { supabase, PROFILES_TABLE, type Profile, type UserRole } from '@/lib/supabase'
 import type { User } from '@supabase/supabase-js'
 
-const PROFILE_FETCH_TIMEOUT_MS = 8000
+const PROFILE_FETCH_TIMEOUT_MS = 15000
 const INITIAL_LOAD_MAX_MS = 4000
+const PROFILE_FETCH_DELAY_MS = 1200
+const PROFILE_FETCH_RETRY_DELAY_MS = 700
+const PROFILE_FETCH_MAX_ATTEMPTS = 5
 
 type AuthContextValue = {
   user: User | null
   profile: Profile | null
   loading: boolean
   profileChecked: boolean
+  signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   hasAccess: boolean
   retryProfileFetch: () => Promise<void>
-  autoSignIn: () => Promise<boolean>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -29,7 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profileChecked, setProfileChecked] = useState(false)
   const userRef = useRef<User | null>(null)
   userRef.current = user
-  const hadSessionRef = useRef(false)
+  const signingOutRef = useRef(false)
 
   const fetchOrCreateProfile = useCallback(async (uid: string, email: string): Promise<Profile | null> => {
     const { data: existing, error: selectError } = await supabase
@@ -68,13 +71,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(t)
   }, [])
 
-  // Auto sign-in: no login screen — use env credentials when there's no session
-  const autoSignIn = useCallback(async () => {
-    const email = process.env.NEXT_PUBLIC_DASHBOARD_EMAIL
-    const password = process.env.NEXT_PUBLIC_DASHBOARD_PASSWORD
-    if (!email || !password) return false
+  const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
-    return !error
+    return { error: error?.message ?? null }
   }, [])
 
   // Single source of truth: only onAuthStateChange (no getSession()) to avoid auth lock contention
@@ -83,19 +82,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (cancelled) return
-      setUser(session?.user ?? null)
       if (!session?.user) {
+        signingOutRef.current = false
+        setUser(null)
         setProfile(null)
         setProfileChecked(true)
-        if (hadSessionRef.current) {
-          setLoading(false)
-          return
-        }
-        const ok = await autoSignIn()
-        if (!cancelled && !ok) setLoading(false)
+        setLoading(false)
         return
       }
-      hadSessionRef.current = true
+      if (signingOutRef.current) return
+      setUser(session.user)
       setProfileChecked(false)
       setLoading(true)
       let done = false
@@ -106,14 +102,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false)
       }, PROFILE_FETCH_TIMEOUT_MS)
       try {
-        // Wait for session to be applied so RLS allows profile read/insert
-        await new Promise((r) => setTimeout(r, 400))
+        await new Promise((r) => setTimeout(r, PROFILE_FETCH_DELAY_MS))
         if (cancelled) return
-        let p = await fetchOrCreateProfile(session.user.id, session.user.email ?? '')
-        if (p == null && !cancelled && !done) {
-          await new Promise((r) => setTimeout(r, 800))
-          if (cancelled) return
+        let p: Profile | null = null
+        for (let attempt = 0; attempt < PROFILE_FETCH_MAX_ATTEMPTS && !cancelled && !done; attempt++) {
           p = await fetchOrCreateProfile(session.user.id, session.user.email ?? '')
+          if (p != null) break
+          if (attempt < PROFILE_FETCH_MAX_ATTEMPTS - 1) {
+            await new Promise((r) => setTimeout(r, PROFILE_FETCH_RETRY_DELAY_MS))
+          }
         }
         if (cancelled) return
         if (!done) {
@@ -137,7 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       cancelled = true
       subscription.unsubscribe()
     }
-  }, [fetchOrCreateProfile, autoSignIn])
+  }, [fetchOrCreateProfile])
 
   useEffect(() => {
     if (loading || !user || profile) return
@@ -150,10 +147,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [loading, user, profile, fetchOrCreateProfile])
 
   const signOut = useCallback(async () => {
+    signingOutRef.current = true
     setUser(null)
     setProfile(null)
-    setProfileChecked(false)
-    supabase.auth.signOut().catch(() => {})
+    setProfileChecked(true)
+    setLoading(false)
+    await supabase.auth.signOut().catch(() => {})
   }, [])
 
   const hasAccess = !!profile && ALLOWED_ROLES.includes(profile.role)
@@ -168,7 +167,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, fetchOrCreateProfile])
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, profileChecked, signOut, hasAccess, retryProfileFetch, autoSignIn }}>
+    <AuthContext.Provider value={{ user, profile, loading, profileChecked, signIn, signOut, hasAccess, retryProfileFetch }}>
       {children}
     </AuthContext.Provider>
   )

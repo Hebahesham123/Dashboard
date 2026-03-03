@@ -3,10 +3,11 @@
 import { useEffect, useRef } from 'react'
 import { useAuth } from './AuthContext'
 import { useLocale } from './LocaleContext'
+import LoginForm from './LoginForm'
 import Dashboard from './Dashboard'
 
 export default function AuthGuard() {
-  const { user, profile, loading, profileChecked, signOut, hasAccess, retryProfileFetch, autoSignIn } = useAuth()
+  const { user, profile, loading, profileChecked, signOut, hasAccess, retryProfileFetch } = useAuth()
   const { t, dir } = useLocale()
   const signOutDone = useRef(false)
 
@@ -34,20 +35,7 @@ export default function AuthGuard() {
   }
 
   if (!user) {
-    return (
-      <div className="min-h-screen bg-[#0d1117] flex items-center justify-center" dir={dir}>
-        <div className="flex flex-col items-center gap-4 text-gray-300 max-w-sm text-center">
-          <p className="text-sm">{t('dashboard_auto_signin_help')}</p>
-          <button
-            type="button"
-            onClick={() => autoSignIn()}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm text-white"
-          >
-            {t('retry')}
-          </button>
-        </div>
-      </div>
-    )
+    return <LoginForm />
   }
 
   if (!profileChecked) {
@@ -62,20 +50,34 @@ export default function AuthGuard() {
   }
 
   if (!hasAccess) {
-    // Profile failed to load or timed out — show retry instead of signing out
     if (profile === null) {
+      const setupSql = `INSERT INTO profiles (user_id, email, role)
+SELECT id, email, 'call_center'
+FROM auth.users
+ON CONFLICT (user_id) DO UPDATE SET email = EXCLUDED.email;`
       return (
-        <div className="min-h-screen bg-[#0d1117] flex items-center justify-center" dir={dir}>
-          <div className="flex flex-col items-center gap-4 text-gray-300 max-w-md text-center px-4">
-            <p className="text-sm">{t('profile_load_failed')}</p>
+        <div className="min-h-screen bg-[#0d1117] flex items-center justify-center p-4" dir={dir}>
+          <div className="w-full max-w-lg flex flex-col gap-5 text-left">
+            <h1 className="text-lg font-semibold text-gray-100">{t('setup_title')}</h1>
+            <p className="text-sm text-gray-400">{t('setup_intro')}</p>
+            <ol className="list-decimal list-inside space-y-2 text-sm text-gray-300">
+              <li>{t('setup_step1')}</li>
+              <li>{t('setup_step2')}</li>
+              <li>{t('setup_step3')}</li>
+            </ol>
+            <div>
+              <p className="text-xs font-medium text-gray-500 mb-1">{t('setup_sql_label')}</p>
+              <pre className="p-3 rounded-lg bg-[#161b22] border border-gray-800 text-xs text-gray-300 overflow-x-auto whitespace-pre-wrap break-all font-mono">
+                {setupSql}
+              </pre>
+            </div>
             <button
               type="button"
               onClick={() => retryProfileFetch()}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm text-white"
+              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium text-white self-start"
             >
               {t('retry')}
             </button>
-            <p className="text-xs text-gray-500 mt-2">{t('profile_load_failed_hint')}</p>
           </div>
         </div>
       )
