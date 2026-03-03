@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from './AuthContext'
 import { useLocale } from './LocaleContext'
 import LoginForm from './LoginForm'
@@ -10,6 +10,7 @@ export default function AuthGuard() {
   const { user, profile, loading, profileChecked, signOut, hasAccess, retryProfileFetch } = useAuth()
   const { t, dir } = useLocale()
   const signOutDone = useRef(false)
+  const [copyDone, setCopyDone] = useState(false)
 
   // Only sign out when we know the user has a profile but wrong role — not when profile failed to load
   useEffect(() => {
@@ -60,13 +61,29 @@ ON CONFLICT (user_id) DO UPDATE SET email = EXCLUDED.email;`
           <div className="w-full max-w-lg flex flex-col gap-5 text-left">
             <h1 className="text-lg font-semibold text-gray-100">{t('setup_title')}</h1>
             <p className="text-sm text-gray-400">{t('setup_intro')}</p>
+            <p className="text-xs text-amber-200/90 bg-amber-900/20 border border-amber-700/40 rounded-lg px-3 py-2">
+              {t('setup_deploy_note')}
+            </p>
             <ol className="list-decimal list-inside space-y-2 text-sm text-gray-300">
               <li>{t('setup_step1')}</li>
               <li>{t('setup_step2')}</li>
               <li>{t('setup_step3')}</li>
             </ol>
             <div>
-              <p className="text-xs font-medium text-gray-500 mb-1">{t('setup_sql_label')}</p>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <p className="text-xs font-medium text-gray-500">{t('setup_sql_label')}</p>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(setupSql)
+                    setCopyDone(true)
+                    setTimeout(() => setCopyDone(false), 2000)
+                  }}
+                  className="text-xs px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-200"
+                >
+                  {copyDone ? t('copy_copied') : t('copy_sql')}
+                </button>
+              </div>
               <pre className="p-3 rounded-lg bg-[#161b22] border border-gray-800 text-xs text-gray-300 overflow-x-auto whitespace-pre-wrap break-all font-mono">
                 {setupSql}
               </pre>

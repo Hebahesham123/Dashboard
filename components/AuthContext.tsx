@@ -9,6 +9,7 @@ const INITIAL_LOAD_MAX_MS = 4000
 const PROFILE_FETCH_DELAY_MS = 1200
 const PROFILE_FETCH_RETRY_DELAY_MS = 700
 const PROFILE_FETCH_MAX_ATTEMPTS = 5
+const SIGN_OUT_FLAG_KEY = 'dashboard_signed_out'
 
 type AuthContextValue = {
   user: User | null
@@ -71,7 +72,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(t)
   }, [])
 
+  // On mount: if user signed out before refresh, clear Supabase session so we stay on login
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (window.sessionStorage.getItem(SIGN_OUT_FLAG_KEY)) {
+      supabase.auth.signOut().catch(() => {})
+    }
+  }, [])
+
   const signIn = useCallback(async (email: string, password: string) => {
+    signingOutRef.current = false
+    if (typeof window !== 'undefined') window.sessionStorage.removeItem(SIGN_OUT_FLAG_KEY)
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     return { error: error?.message ?? null }
   }, [])
@@ -83,7 +94,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (cancelled) return
       if (!session?.user) {
-        signingOutRef.current = false
         setUser(null)
         setProfile(null)
         setProfileChecked(true)
@@ -91,6 +101,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return
       }
       if (signingOutRef.current) return
+      if (typeof window !== 'undefined' && window.sessionStorage.getItem(SIGN_OUT_FLAG_KEY)) {
+        setUser(null)
+        setProfile(null)
+        setProfileChecked(true)
+        setLoading(false)
+        await supabase.auth.signOut().catch(() => {})
+        return
+      }
       setUser(session.user)
       setProfileChecked(false)
       setLoading(true)
@@ -148,6 +166,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     signingOutRef.current = true
+    if (typeof window !== 'undefined') window.sessionStorage.setItem(SIGN_OUT_FLAG_KEY, '1')
     setUser(null)
     setProfile(null)
     setProfileChecked(true)
