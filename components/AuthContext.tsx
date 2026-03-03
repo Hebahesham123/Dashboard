@@ -29,6 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profileChecked, setProfileChecked] = useState(false)
   const userRef = useRef<User | null>(null)
   userRef.current = user
+  const hadSessionRef = useRef(false)
 
   const fetchOrCreateProfile = useCallback(async (uid: string, email: string): Promise<Profile | null> => {
     const { data: existing, error: selectError } = await supabase
@@ -86,10 +87,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!session?.user) {
         setProfile(null)
         setProfileChecked(true)
+        if (hadSessionRef.current) {
+          setLoading(false)
+          return
+        }
         const ok = await autoSignIn()
         if (!cancelled && !ok) setLoading(false)
         return
       }
+      hadSessionRef.current = true
       setProfileChecked(false)
       setLoading(true)
       let done = false
