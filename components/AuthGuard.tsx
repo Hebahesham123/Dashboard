@@ -81,9 +81,15 @@ ON CONFLICT (user_id) DO UPDATE SET email = EXCLUDED.email;`
           <main className="max-w-6xl mx-auto px-4 py-6">
             <div className="w-full max-w-lg flex flex-col gap-5 text-left">
               <h2 className="text-lg font-semibold text-gray-100">{t('setup_title')}</h2>
+              <p className="text-sm text-gray-300 bg-blue-900/20 border border-blue-700/40 rounded-lg px-3 py-2">
+                {t('setup_why')}
+              </p>
               <p className="text-sm text-gray-400">{t('setup_intro')}</p>
               <p className="text-xs text-amber-200/90 bg-amber-900/20 border border-amber-700/40 rounded-lg px-3 py-2">
                 {t('setup_deploy_note')}
+              </p>
+              <p className="text-xs text-gray-500 italic">
+                {t('setup_table_first')}
               </p>
               <ol className="list-decimal list-inside space-y-2 text-sm text-gray-300">
                 <li>{t('setup_step1')}</li>
