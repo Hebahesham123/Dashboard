@@ -6,7 +6,7 @@ import type { User } from '@supabase/supabase-js'
 
 const PROFILE_FETCH_TIMEOUT_MS = 6000
 const INITIAL_LOAD_MAX_MS = 1500
-const PROFILE_FETCH_DELAY_MS = 300
+const PROFILE_FETCH_DELAY_MS = 600
 const PROFILE_FETCH_RETRY_DELAY_MS = 400
 const PROFILE_FETCH_MAX_ATTEMPTS = 5
 const SIGN_OUT_FLAG_KEY = 'dashboard_signed_out'
@@ -34,6 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const userRef = useRef<User | null>(null)
   userRef.current = user
   const signingOutRef = useRef(false)
+  const sessionRestoredRef = useRef(false)
 
   const fetchOrCreateProfile = useCallback(async (uid: string, email: string): Promise<Profile | null> => {
     const { data: existing, error: selectError } = await supabase
@@ -80,6 +81,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  const runProfileFetch = useCallback(
+    async (uid: string, email: string) => {
+      let done = false
+      const profileTimeout = setTimeout(() => {
+        if (!done) {
+          done = true
+          setProfileChecked(true)
+          setLoading(false)
+        }
+      }, PROFILE_FETCH_TIMEOUT_MS)
+      try {
+        await new Promise((r) => setTimeout(r, PROFILE_FETCH_DELAY_MS))
+        let p: Profile | null = null
+        for (let attempt = 0; attempt < PROFILE_FETCH_MAX_ATTEMPTS && !done; attempt++) {
+          p = await fetchOrCreateProfile(uid, email)
+          if (p != null) break
+          if (attempt < PROFILE_FETCH_MAX_ATTEMPTS - 1) {
+            await new Promise((r) => setTimeout(r, PROFILE_FETCH_RETRY_DELAY_MS))
+          }
+        }
+        if (!done) {
+          done = true
+          clearTimeout(profileTimeout)
+          setProfile(p)
+          setProfileChecked(true)
+          setLoading(false)
+        }
+      } catch {
+        if (!done) {
+          done = true
+          clearTimeout(profileTimeout)
+          setProfileChecked(true)
+          setLoading(false)
+        }
+      }
+    },
+    [fetchOrCreateProfile]
+  )
+
   const signIn = useCallback(async (email: string, password: string) => {
     signingOutRef.current = false
     if (typeof window !== 'undefined') window.sessionStorage.removeItem(SIGN_OUT_FLAG_KEY)
@@ -87,13 +127,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: error?.message ?? null }
   }, [])
 
-  // Single source of truth: only onAuthStateChange (no getSession()) to avoid auth lock contention
+  // On mount: restore session first so profile fetch on refresh sends the JWT (fixes refresh → setup screen)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (window.sessionStorage.getItem(SIGN_OUT_FLAG_KEY)) return
+
+    let cancelled = false
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (cancelled || !session?.user || sessionRestoredRef.current) return
+      sessionRestoredRef.current = true
+      setUser(session.user)
+      setProfileChecked(false)
+      setLoading(true)
+      runProfileFetch(session.user.id, session.user.email ?? '')
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [runProfileFetch])
+
+  // React to sign-in / sign-out; on refresh we may have already restored from getSession above
   useEffect(() => {
     let cancelled = false
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (cancelled) return
       if (!session?.user) {
+        sessionRestoredRef.current = false
         setUser(null)
         setProfile(null)
         setProfileChecked(true)
@@ -112,47 +172,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session.user)
       setProfileChecked(false)
       setLoading(true)
-      let done = false
-      const profileTimeout = setTimeout(() => {
-        if (cancelled || done) return
-        done = true
-        setProfileChecked(true)
-        setLoading(false)
-      }, PROFILE_FETCH_TIMEOUT_MS)
-      try {
-        await new Promise((r) => setTimeout(r, PROFILE_FETCH_DELAY_MS))
-        if (cancelled) return
-        let p: Profile | null = null
-        for (let attempt = 0; attempt < PROFILE_FETCH_MAX_ATTEMPTS && !cancelled && !done; attempt++) {
-          p = await fetchOrCreateProfile(session.user.id, session.user.email ?? '')
-          if (p != null) break
-          if (attempt < PROFILE_FETCH_MAX_ATTEMPTS - 1) {
-            await new Promise((r) => setTimeout(r, PROFILE_FETCH_RETRY_DELAY_MS))
-          }
-        }
-        if (cancelled) return
-        if (!done) {
-          done = true
-          clearTimeout(profileTimeout)
-          setProfile(p)
-          setProfileChecked(true)
-          setLoading(false)
-        }
-      } catch (e) {
-        if (!cancelled && !done) {
-          done = true
-          clearTimeout(profileTimeout)
-          setProfileChecked(true)
-          setLoading(false)
-        }
-      }
+      if (event === 'INITIAL_SESSION' && sessionRestoredRef.current) return
+      sessionRestoredRef.current = true
+      runProfileFetch(session.user.id, session.user.email ?? '')
     })
 
     return () => {
       cancelled = true
       subscription.unsubscribe()
     }
-  }, [fetchOrCreateProfile])
+  }, [runProfileFetch])
 
   useEffect(() => {
     if (loading || !user || profile) return
