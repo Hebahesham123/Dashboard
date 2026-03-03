@@ -4,10 +4,10 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef } f
 import { supabase, PROFILES_TABLE, type Profile, type UserRole } from '@/lib/supabase'
 import type { User } from '@supabase/supabase-js'
 
-const PROFILE_FETCH_TIMEOUT_MS = 15000
-const INITIAL_LOAD_MAX_MS = 4000
-const PROFILE_FETCH_DELAY_MS = 1200
-const PROFILE_FETCH_RETRY_DELAY_MS = 700
+const PROFILE_FETCH_TIMEOUT_MS = 6000
+const INITIAL_LOAD_MAX_MS = 1500
+const PROFILE_FETCH_DELAY_MS = 300
+const PROFILE_FETCH_RETRY_DELAY_MS = 400
 const PROFILE_FETCH_MAX_ATTEMPTS = 5
 const SIGN_OUT_FLAG_KEY = 'dashboard_signed_out'
 
