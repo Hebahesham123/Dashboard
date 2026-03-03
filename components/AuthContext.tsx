@@ -60,6 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(t)
   }, [])
 
+  // Single source of truth: only onAuthStateChange (no getSession()) to avoid auth lock contention / "Lock broken by steal" in Strict Mode
   useEffect(() => {
     let cancelled = false
 
@@ -73,41 +74,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return
       }
       setProfileChecked(false)
-      const p = await fetchOrCreateProfile(session.user.id, session.user.email ?? '')
-      if (!cancelled) {
-        setProfile(p)
-        setProfileChecked(true)
-        setLoading(false)
-      }
-    })
-
-    // When we have a session, wait for profile fetch before showing UI (so we don't sign out on refresh before profile loads)
-    Promise.race([
-      supabase.auth.getSession(),
-      new Promise<{ data: { session: null } }>((resolve) => setTimeout(() => resolve({ data: { session: null } }), 5000)),
-    ]).then(({ data: { session } }) => {
-      if (cancelled) return
-      setUser(session?.user ?? null)
-      if (!session?.user) {
-        setProfileChecked(true)
-        setLoading(false)
-        return
-      }
-      setProfileChecked(false)
-      let profileTimeout: ReturnType<typeof setTimeout> | null = setTimeout(() => {
-        profileTimeout = null
+      try {
+        const p = await fetchOrCreateProfile(session.user.id, session.user.email ?? '')
+        if (!cancelled) {
+          setProfile(p)
+          setProfileChecked(true)
+          setLoading(false)
+        }
+      } catch (e) {
         if (!cancelled) {
           setProfileChecked(true)
           setLoading(false)
         }
-      }, 4000)
-      fetchOrCreateProfile(session.user.id, session.user.email ?? '').then((p) => {
-        if (cancelled) return
-        if (profileTimeout) clearTimeout(profileTimeout)
-        setProfile(p)
-        setProfileChecked(true)
-        setLoading(false)
-      })
+      }
     })
 
     return () => {
