@@ -313,7 +313,7 @@ export default function Analytics({ submissions, onBack }: AnalyticsProps) {
                   outerRadius={80}
                   paddingAngle={2}
                   dataKey="value"
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
                 >
                   {pieData.map((_, i) => (
                     <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
@@ -321,7 +321,7 @@ export default function Analytics({ submissions, onBack }: AnalyticsProps) {
                 </Pie>
                 <Tooltip
                   contentStyle={{ backgroundColor: '#21262d', border: '1px solid #30363d', borderRadius: 8 }}
-                  formatter={(value: number) => [value, t('total')]}
+                  formatter={(value) => [value ?? 0, t('total')]}
                 />
                 <Legend />
               </PieChart>
