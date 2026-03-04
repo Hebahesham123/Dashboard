@@ -17,6 +17,7 @@ Redeploy after changing env vars.
 2. Run **supabase-auth-and-roles.sql** (creates `profiles` table and RLS).  
 3. Run **supabase-bootstrap-profiles.sql** (creates a profile for every user in Authentication).  
 4. Add users in **Authentication → Users** (email + password). New users get a profile via trigger; if not, run supabase-bootstrap-profiles.sql again.  
+5. Run **supabase-status-not-reached.sql** so "Not reached (1st / 2nd / 3rd time)" count and 30‑minute cooldown are stored in the database.
 
 After that: open site → Login → Dashboard. Sign out → Login again. To make someone admin: `UPDATE profiles SET role = 'admin' WHERE email = 'their@email.com';`
 

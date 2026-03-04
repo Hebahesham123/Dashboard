@@ -25,11 +25,13 @@ function getNotReachedLabel(count: number, t: (k: string) => string): string {
 export default function StatusSelect({
   submission,
   onStatusChange,
+  onRecordNotReachedAgain,
   disabled,
   size = 'md',
 }: {
   submission: SampleInquiry
   onStatusChange: (id: string, status: SubmissionStatus) => void
+  onRecordNotReachedAgain?: (id: string) => void
   disabled?: boolean
   size?: 'sm' | 'md'
 }) {
@@ -59,45 +61,65 @@ export default function StatusSelect({
   }
 
   const isSm = size === 'sm'
+  const showRecordAgain = value === 'not_reached' && !notReachedBlocked && !disabled
+
   return (
-    <select
-      value={value}
-      onChange={handleChange}
-      disabled={disabled}
-      onClick={(e) => e.stopPropagation()}
-      title={
-        value === 'done'
-          ? t('not_reached_when_done')
-          : value !== 'new'
-            ? t('status_new_disabled')
-            : notReachedBlocked
-              ? t('not_reached_wait')
-              : undefined
-      }
-      className={`
-        status-select rounded-lg border bg-black/20 text-current font-medium
-        focus:outline-none focus:ring-2 focus:ring-blue-400
-        ${getStatusStyle(value)}
-        ${isSm ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'}
-      `}
-      aria-label={t('status')}
-      style={{ color: 'inherit' }}
-    >
-      {statusOptions.map((opt) => {
-        const notReachedWhenDone = opt.value === 'not_reached' && value === 'done'
-        const newDisabled = opt.value === 'new' && value !== 'new'
-        const optDisabled =
-          (opt.value === 'not_reached' && notReachedBlocked) || notReachedWhenDone || newDisabled
-        const label =
-          opt.value === 'not_reached' && value === 'not_reached' && notReachedCount > 0
-            ? getNotReachedLabel(notReachedCount, t)
-            : t(opt.labelKey as string)
-        return (
-          <option key={opt.value} value={opt.value} disabled={optDisabled}>
-            {label}
-          </option>
-        )
-      })}
-    </select>
+    <div className="flex flex-col gap-1.5">
+      <select
+        value={value}
+        onChange={handleChange}
+        disabled={disabled}
+        onClick={(e) => e.stopPropagation()}
+        title={
+          value === 'done'
+            ? t('not_reached_when_done')
+            : value !== 'new'
+              ? t('status_new_disabled')
+              : notReachedBlocked
+                ? t('not_reached_wait')
+                : undefined
+        }
+        className={`
+          status-select rounded-lg border bg-black/20 text-current font-medium
+          focus:outline-none focus:ring-2 focus:ring-blue-400
+          ${getStatusStyle(value)}
+          ${isSm ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'}
+        `}
+        aria-label={t('status')}
+        style={{ color: 'inherit' }}
+      >
+        {statusOptions.map((opt) => {
+          const notReachedWhenDone = opt.value === 'not_reached' && value === 'done'
+          const newDisabled = opt.value === 'new' && value !== 'new'
+          const optDisabled =
+            (opt.value === 'not_reached' && notReachedBlocked) || notReachedWhenDone || newDisabled
+          const label =
+            opt.value === 'not_reached' && value === 'not_reached' && notReachedCount > 0
+              ? getNotReachedLabel(notReachedCount, t)
+              : t(opt.labelKey as string)
+          return (
+            <option key={opt.value} value={opt.value} disabled={optDisabled}>
+              {label}
+            </option>
+          )
+        })}
+      </select>
+      {showRecordAgain && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            if (onRecordNotReachedAgain) {
+              onRecordNotReachedAgain(submission.id)
+            } else {
+              onStatusChange(submission.id, 'not_reached')
+            }
+          }}
+          className={`text-left text-xs font-medium underline hover:no-underline focus:outline-none focus:ring-0 ${getStatusStyle('not_reached')} rounded px-1 py-0.5 w-fit`}
+        >
+          {t('not_reached_record_again')}
+        </button>
+      )}
+    </div>
   )
 }

@@ -133,9 +133,10 @@ export default function SubmissionDetail({
               <StatusSelect
                 submission={{ ...submission, status: draftStatus ?? submission.status ?? 'new' }}
                 onStatusChange={(_, status) => setDraftStatus(status)}
+                onRecordNotReachedAgain={() => onStatusChange(submission.id, 'not_reached')}
                 size="md"
               />
-              {draftStatus != null && draftStatus !== (submission.status ?? 'new') && (
+              {(draftStatus != null && (draftStatus !== (submission.status ?? 'new') || (draftStatus === 'not_reached' && (submission.status ?? 'new') === 'not_reached'))) && (
                 <button
                   type="button"
                   onClick={() => {
@@ -154,11 +155,17 @@ export default function SubmissionDetail({
             <textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              onBlur={() => onCommentChange(submission.id, comment.trim() || null)}
-              placeholder={t('comment')}
+              placeholder={t('comment_add')}
               rows={3}
               className="w-full px-3 py-2 rounded-lg bg-[#0d1117] border border-gray-700 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y min-h-[80px]"
             />
+            <button
+              type="button"
+              onClick={() => onCommentChange(submission.id, comment.trim() || null)}
+              className="mt-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-[#161b22]"
+            >
+              {t('save')}
+            </button>
           </div>
           <div>
             <button

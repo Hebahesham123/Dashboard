@@ -22,6 +22,7 @@ export default function SubmissionsTable({
   onSelect,
   onStatusDraft,
   onStatusSave,
+  onRecordNotReachedAgain,
   onCommentChange,
   sortOrder,
   onSortChange,
@@ -40,6 +41,7 @@ export default function SubmissionsTable({
   onSelect: (row: SampleInquiry) => void
   onStatusDraft: (id: string, status: SubmissionStatus) => void
   onStatusSave: (id: string) => void
+  onRecordNotReachedAgain?: (id: string) => void
   onCommentChange: (id: string, comment: string | null) => void
   sortOrder: 'desc' | 'asc'
   onSortChange: (order: 'desc' | 'asc') => void
@@ -186,9 +188,10 @@ export default function SubmissionsTable({
                       <StatusSelect
                         submission={{ ...row, status: pendingStatus[row.id] ?? row.status ?? 'new' }}
                         onStatusChange={onStatusDraft}
+                        onRecordNotReachedAgain={onRecordNotReachedAgain}
                         size="sm"
                       />
-                      {(pendingStatus[row.id] !== undefined && pendingStatus[row.id] !== (row.status ?? 'new')) && (
+                      {(pendingStatus[row.id] !== undefined && (pendingStatus[row.id] !== (row.status ?? 'new') || (pendingStatus[row.id] === 'not_reached' && (row.status ?? 'new') === 'not_reached'))) && (
                         <button
                           type="button"
                           onClick={(e) => {

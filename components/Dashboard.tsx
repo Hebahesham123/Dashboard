@@ -7,6 +7,7 @@ import { useAuth } from './AuthContext'
 import StatsCards from './StatsCards'
 import SubmissionsTable from './SubmissionsTable'
 import SubmissionDetail from './SubmissionDetail'
+import Analytics from './Analytics'
 
 function getTodayAndWeek(submissions: SampleInquiry[]) {
   const now = new Date()
@@ -39,6 +40,7 @@ export default function Dashboard({ profile }: { profile: Profile }) {
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [toast, setToast] = useState<string | null>(null)
   const [pendingStatus, setPendingStatus] = useState<Record<string, SubmissionStatus>>({})
+  const [view, setView] = useState<'submissions' | 'analytics'>('submissions')
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -101,26 +103,31 @@ export default function Dashboard({ profile }: { profile: Profile }) {
         payload.not_reached_last_at = new Date().toISOString()
       }
 
-      const { error: e } = await supabase.from(TABLE_NAME).update(payload).eq('id', id)
+      const { data: updatedRow, error: e } = await supabase
+        .from(TABLE_NAME)
+        .update(payload)
+        .eq('id', id)
+        .select()
+        .single()
       if (e) {
         setToast(t('failed_to_update_status'))
         setTimeout(() => setToast(null), 3000)
         return
       }
       await logActivity(id, 'status_update', `${oldStatus} → ${status}`)
+      const nextRow = updatedRow as SampleInquiry
       const nextCount = status === 'not_reached' ? (sub?.not_reached_count ?? 0) + 1 : sub?.not_reached_count
       const nextLastAt = status === 'not_reached' ? new Date().toISOString() : sub?.not_reached_last_at
+      const mergedRow: SampleInquiry = {
+        ...nextRow,
+        status,
+        not_reached_count: nextRow.not_reached_count ?? nextCount ?? sub?.not_reached_count ?? null,
+        not_reached_last_at: nextRow.not_reached_last_at ?? nextLastAt ?? sub?.not_reached_last_at ?? null,
+      }
       setSubmissions((prev) =>
-        prev.map((s) =>
-          s.id === id
-            ? { ...s, status, not_reached_count: nextCount, not_reached_last_at: nextLastAt }
-            : s
-        )
+        prev.map((s) => (s.id === id ? mergedRow : s))
       )
-      if (selected?.id === id)
-        setSelected((s) =>
-          s ? { ...s, status, not_reached_count: nextCount, not_reached_last_at: nextLastAt } : null
-        )
+      if (selected?.id === id) setSelected((s) => (s?.id === id ? mergedRow : s))
     },
     [selected?.id, t, submissions, logActivity]
   )
@@ -189,10 +196,32 @@ export default function Dashboard({ profile }: { profile: Profile }) {
         { event: 'UPDATE', schema: 'public', table: TABLE_NAME },
         (payload) => {
           const row = payload.new as SampleInquiry
-          if (row) {
-            setSubmissions((prev) => prev.map((s) => (s.id === row.id ? row : s)))
-            setSelected((prev) => (prev?.id === row.id ? row : prev))
-          }
+          if (!row) return
+          setSubmissions((prev) => {
+            const current = prev.find((s) => s.id === row.id)
+            let merged = row
+            if (current && row.status === 'not_reached' && current.status === 'not_reached') {
+              const incomingCount = row.not_reached_count ?? 0
+              const currentCount = current.not_reached_count ?? 0
+              if (incomingCount < currentCount) {
+                merged = { ...row, not_reached_count: currentCount, not_reached_last_at: current.not_reached_last_at ?? row.not_reached_last_at }
+              }
+            }
+            return prev.map((s) => (s.id === row.id ? merged : s))
+          })
+          setSelected((prev) => {
+            if (prev?.id !== row.id) return prev
+            const current = prev
+            let merged = row
+            if (current && row.status === 'not_reached' && current.status === 'not_reached') {
+              const incomingCount = row.not_reached_count ?? 0
+              const currentCount = current.not_reached_count ?? 0
+              if (incomingCount < currentCount) {
+                merged = { ...row, not_reached_count: currentCount, not_reached_last_at: current.not_reached_last_at ?? row.not_reached_last_at }
+              }
+            }
+            return merged
+          })
         }
       )
       .subscribe()
@@ -284,6 +313,19 @@ export default function Dashboard({ profile }: { profile: Profile }) {
             </button>
             <button
               type="button"
+              onClick={() => setView(view === 'analytics' ? 'submissions' : 'analytics')}
+              className={`text-sm flex items-center gap-2 px-3 py-1.5 rounded-md font-medium ${view === 'analytics' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white bg-gray-800 border border-gray-700'}`}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 3v18h18" />
+                <path d="M18 17V9" />
+                <path d="M13 17V5" />
+                <path d="M8 17v-3" />
+              </svg>
+              {t('analytics')}
+            </button>
+            <button
+              type="button"
               onClick={() => fetchData()}
               className="text-sm text-gray-400 hover:text-white flex items-center gap-2"
             >
@@ -305,26 +347,33 @@ export default function Dashboard({ profile }: { profile: Profile }) {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 py-6">
-        <StatsCards total={submissions.length} today={today} week={week} />
-        <SubmissionsTable
-          submissions={submissions}
-          pendingStatus={pendingStatus}
-          statusFilter={statusFilter}
-          onStatusFilterChange={setStatusFilter}
-          onExport={handleExport}
-          onSelect={setSelected}
-          onStatusDraft={onStatusDraft}
-          onStatusSave={onStatusSave}
-          onCommentChange={updateComment}
-          sortOrder={sortOrder}
-          onSortChange={setSortOrder}
-          limit={limit}
-          onLimitChange={setLimit}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          isLoading={loading}
-          selectedId={selected?.id ?? null}
-        />
+        {view === 'analytics' ? (
+          <Analytics submissions={submissions} onBack={() => setView('submissions')} />
+        ) : (
+          <>
+            <StatsCards total={submissions.length} today={today} week={week} />
+            <SubmissionsTable
+              submissions={submissions}
+              pendingStatus={pendingStatus}
+              statusFilter={statusFilter}
+              onStatusFilterChange={setStatusFilter}
+              onExport={handleExport}
+              onSelect={setSelected}
+              onStatusDraft={onStatusDraft}
+              onStatusSave={onStatusSave}
+              onRecordNotReachedAgain={(id) => updateStatus(id, 'not_reached')}
+              onCommentChange={updateComment}
+              sortOrder={sortOrder}
+              onSortChange={setSortOrder}
+              limit={limit}
+              onLimitChange={setLimit}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              isLoading={loading}
+              selectedId={selected?.id ?? null}
+            />
+          </>
+        )}
       </main>
 
       {selected && (
