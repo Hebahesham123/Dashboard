@@ -3,7 +3,7 @@
 import type { SampleInquiry, SubmissionStatus } from '@/lib/supabase'
 import { useLocale } from './LocaleContext'
 import StatusSelect from './StatusSelect'
-import RequestedSamplesCell from './RequestedSamplesCell'
+import RequestedSamplesCell, { parseRequestedSamples } from './RequestedSamplesCell'
 import CommentCell from './CommentCell'
 
 function formatDate(val: string | null, locale: string) {
@@ -152,6 +152,7 @@ export default function SubmissionsTable({
                 <th className="text-left py-2.5 px-3 text-xs font-medium text-gray-500">{t('name')}</th>
                 <th className="text-left py-2.5 px-3 text-xs font-medium text-gray-500 hidden sm:table-cell">{t('phone')}</th>
                 <th className="text-left py-2.5 px-3 text-xs font-medium text-gray-500">{t('requested_samples')}</th>
+                <th className="text-center py-2.5 px-2 text-xs font-medium text-gray-500 w-12" title={t('requested_samples_count')}>{t('requested_samples_count')}</th>
                 <th className="text-left py-2.5 px-3 text-xs font-medium text-gray-500">{t('status')}</th>
                 <th className="text-left py-2.5 px-3 text-xs font-medium text-gray-500 min-w-[120px]">{t('comment')}</th>
                 <th className="text-left py-2.5 px-3 text-xs font-medium text-gray-500 w-16" />
@@ -160,7 +161,7 @@ export default function SubmissionsTable({
             <tbody>
               {displayed.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-16 text-center text-gray-500 text-sm">
+                  <td colSpan={9} className="py-16 text-center text-gray-500 text-sm">
                     {submissions.length === 0 ? t('no_submissions') : t('no_matching')}
                   </td>
                 </tr>
@@ -182,6 +183,9 @@ export default function SubmissionsTable({
                   <td className="py-2.5 px-3 text-gray-400 hidden sm:table-cell">{row.phone ?? '—'}</td>
                   <td className="py-2.5 px-3 max-w-[160px]" onClick={(e) => e.stopPropagation()}>
                     <RequestedSamplesCell value={row.requested_samples} />
+                  </td>
+                  <td className="py-2.5 px-2 text-center text-gray-400 tabular-nums w-12">
+                    {parseRequestedSamples(row.requested_samples ?? null).length || '—'}
                   </td>
                   <td className="py-2.5 px-3 align-middle" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1.5 flex-wrap">
