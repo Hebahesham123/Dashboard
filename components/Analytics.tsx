@@ -139,13 +139,17 @@ function getWeekCounts(submissions: SampleInquiry[]) {
   startOfLastWeek.setDate(startOfLastWeek.getDate() - 7)
   let thisWeek = 0
   let lastWeek = 0
+  const thisWeekStart = startOfThisWeek.getTime()
+  const thisWeekEnd = thisWeekStart + 7 * 24 * 60 * 60 * 1000
+  const lastWeekStart = startOfLastWeek.getTime()
   submissions.forEach((row) => {
     const t = row[CREATED_AT_COLUMN as keyof SampleInquiry]
     if (t == null) return
     const d = new Date(t as string)
-    if (isNaN(d.getTime())) return
-    if (d >= startOfThisWeek && d < startOfThisWeek.getTime() + 7 * 24 * 60 * 60 * 1000) thisWeek++
-    else if (d >= startOfLastWeek && d < startOfThisWeek.getTime()) lastWeek++
+    const ts = d.getTime()
+    if (isNaN(ts)) return
+    if (ts >= thisWeekStart && ts < thisWeekEnd) thisWeek++
+    else if (ts >= lastWeekStart && ts < thisWeekStart) lastWeek++
   })
   return { thisWeek, lastWeek }
 }
