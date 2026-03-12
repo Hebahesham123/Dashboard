@@ -49,6 +49,7 @@ export const NOT_REACHED_COOLDOWN_MS = 30 * 60 * 1000 // 30 minutes
 
 export type SampleInquiry = {
   id: string
+  reference_id?: string | null
   name: string
   phone: string
   address: string | null

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase, TABLE_NAME, CREATED_AT_COLUMN, ACTIVITY_TABLE, NOT_REACHED_COOLDOWN_MS, type SampleInquiry, type SubmissionStatus, type Profile } from '@/lib/supabase'
 import { useLocale } from './LocaleContext'
 import { useAuth } from './AuthContext'
@@ -8,6 +8,60 @@ import StatsCards from './StatsCards'
 import SubmissionsTable from './SubmissionsTable'
 import SubmissionDetail from './SubmissionDetail'
 import Analytics from './Analytics'
+
+const DASHBOARD_STORAGE_KEY = 'dashboard_state'
+
+function loadDashboardState(): Partial<{
+  view: 'submissions' | 'analytics'
+  selectedId: string
+  statusFilter: string
+  searchQuery: string
+  sortOrder: 'desc' | 'asc'
+  limit: number
+}> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = window.sessionStorage.getItem(DASHBOARD_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    return {
+      view: parsed.view === 'analytics' ? 'analytics' : 'submissions',
+      selectedId: typeof parsed.selectedId === 'string' ? parsed.selectedId : '',
+      statusFilter: typeof parsed.statusFilter === 'string' ? parsed.statusFilter : '',
+      searchQuery: typeof parsed.searchQuery === 'string' ? parsed.searchQuery : '',
+      sortOrder: parsed.sortOrder === 'asc' ? 'asc' : 'desc',
+      limit: typeof parsed.limit === 'number' && parsed.limit >= 1 ? Math.min(100, parsed.limit) : 25,
+    }
+  } catch {
+    return {}
+  }
+}
+
+function saveDashboardState(state: {
+  view: 'submissions' | 'analytics'
+  selectedId: string | null
+  statusFilter: string
+  searchQuery: string
+  sortOrder: 'desc' | 'asc'
+  limit: number
+}) {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.setItem(
+      DASHBOARD_STORAGE_KEY,
+      JSON.stringify({
+        view: state.view,
+        selectedId: state.selectedId ?? '',
+        statusFilter: state.statusFilter,
+        searchQuery: state.searchQuery,
+        sortOrder: state.sortOrder,
+        limit: state.limit,
+      })
+    )
+  } catch {
+    // ignore
+  }
+}
 
 function getTodayAndWeek(submissions: SampleInquiry[]) {
   const now = new Date()
@@ -27,6 +81,11 @@ function getTodayAndWeek(submissions: SampleInquiry[]) {
   return { today, week }
 }
 
+function getInitialState() {
+  if (typeof window === 'undefined') return null
+  return loadDashboardState()
+}
+
 export default function Dashboard({ profile }: { profile: Profile }) {
   const { t, locale, setLocale, dir } = useLocale()
   const { signOut } = useAuth()
@@ -34,13 +93,14 @@ export default function Dashboard({ profile }: { profile: Profile }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<SampleInquiry | null>(null)
-  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc')
-  const [limit, setLimit] = useState(25)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('')
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>(() => getInitialState()?.sortOrder ?? 'desc')
+  const [limit, setLimit] = useState(() => getInitialState()?.limit ?? 25)
+  const [searchQuery, setSearchQuery] = useState(() => getInitialState()?.searchQuery ?? '')
+  const [statusFilter, setStatusFilter] = useState<string>(() => getInitialState()?.statusFilter ?? '')
   const [toast, setToast] = useState<string | null>(null)
   const [pendingStatus, setPendingStatus] = useState<Record<string, SubmissionStatus>>({})
-  const [view, setView] = useState<'submissions' | 'analytics'>('submissions')
+  const [view, setView] = useState<'submissions' | 'analytics'>(() => getInitialState()?.view ?? 'submissions')
+  const restoredSelectedIdRef = useRef<string | null>(null)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -60,6 +120,30 @@ export default function Dashboard({ profile }: { profile: Profile }) {
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  useEffect(() => {
+    const saved = getInitialState()
+    if (saved?.selectedId) restoredSelectedIdRef.current = saved.selectedId
+  }, [])
+
+  useEffect(() => {
+    if (!restoredSelectedIdRef.current || submissions.length === 0) return
+    const id = restoredSelectedIdRef.current
+    restoredSelectedIdRef.current = null
+    const row = submissions.find((s) => s.id === id)
+    if (row) setSelected(row)
+  }, [submissions])
+
+  useEffect(() => {
+    saveDashboardState({
+      view,
+      selectedId: selected?.id ?? null,
+      statusFilter,
+      searchQuery,
+      sortOrder,
+      limit,
+    })
+  }, [view, selected?.id, statusFilter, searchQuery, sortOrder, limit])
 
   const logActivity = useCallback(
     async (inquiryId: string, action: string, details: string | null) => {
@@ -242,12 +326,13 @@ export default function Dashboard({ profile }: { profile: Profile }) {
     }
     const statusLabel = (s: string | null | undefined) =>
       t(`status_${s ?? 'new'}` as 'status_new') || String(s ?? 'new')
-    const headers = ['No.', 'Date', 'Name', 'Phone', 'Address', 'Message', 'Requested samples', 'Status', 'Comment', 'Created at']
+    const headers = ['No.', 'ID', 'Date', 'Name', 'Phone', 'Address', 'Message', 'Requested samples', 'Status', 'Comment', 'Created at']
     const csvRows = [
       headers.join(','),
       ...rows.map((row, i) =>
         [
           i + 1,
+          escape(row.reference_id ?? ''),
           escape(row.created_at ?? ''),
           escape(row.name),
           escape(row.phone),

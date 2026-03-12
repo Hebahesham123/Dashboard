@@ -148,6 +148,7 @@ export default function SubmissionsTable({
             <thead>
               <tr className="border-b border-gray-800 bg-[#0d1117]/50">
                 <th className="text-left py-2.5 px-2 text-xs font-medium text-gray-500 w-10">{t('serial_no')}</th>
+                <th className="text-left py-2.5 px-2 text-xs font-medium text-gray-500 w-16">{t('reference_id')}</th>
                 <th className="text-left py-2.5 px-3 text-xs font-medium text-gray-500">{t('date')}</th>
                 <th className="text-left py-2.5 px-3 text-xs font-medium text-gray-500">{t('name')}</th>
                 <th className="text-left py-2.5 px-3 text-xs font-medium text-gray-500 hidden sm:table-cell">{t('phone')}</th>
@@ -161,7 +162,7 @@ export default function SubmissionsTable({
             <tbody>
               {displayed.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-16 text-center text-gray-500 text-sm">
+                  <td colSpan={10} className="py-16 text-center text-gray-500 text-sm">
                     {submissions.length === 0 ? t('no_submissions') : t('no_matching')}
                   </td>
                 </tr>
@@ -175,6 +176,9 @@ export default function SubmissionsTable({
                 >
                   <td className="py-2.5 px-2 text-gray-500 text-center tabular-nums w-10">
                     {serial}
+                  </td>
+                  <td className="py-2.5 px-2 text-gray-400 font-mono text-xs w-16">
+                    {row.reference_id ?? '—'}
                   </td>
                   <td className="py-2.5 px-3 text-gray-400 whitespace-nowrap">
                     {formatDate(row.created_at, locale)}

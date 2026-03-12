@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import {
   BarChart,
   Bar,
@@ -158,13 +158,45 @@ function formatDateForInput(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
+const ANALYTICS_STORAGE_KEY = 'dashboard_analytics_state'
+
+function loadAnalyticsState(): Partial<{ dayFilter: DayFilter; dateFrom: string; dateTo: string }> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = window.sessionStorage.getItem(ANALYTICS_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const dayFilter = parsed.dayFilter as string
+    const validDayFilter: DayFilter[] = ['7', '14', '30', 'all', 'custom']
+    return {
+      dayFilter: validDayFilter.includes(dayFilter) ? (dayFilter as DayFilter) : undefined,
+      dateFrom: typeof parsed.dateFrom === 'string' ? parsed.dateFrom : undefined,
+      dateTo: typeof parsed.dateTo === 'string' ? parsed.dateTo : undefined,
+    }
+  } catch {
+    return {}
+  }
+}
+
 export default function Analytics({ submissions, onBack }: AnalyticsProps) {
   const { t, dir } = useLocale()
-  const [dayFilter, setDayFilter] = useState<DayFilter>('14')
   const today = formatDateForInput(new Date())
   const defaultFrom = formatDateForInput((() => { const d = new Date(); d.setDate(d.getDate() - 14); return d })())
-  const [dateFrom, setDateFrom] = useState(defaultFrom)
-  const [dateTo, setDateTo] = useState(today)
+  const [dayFilter, setDayFilter] = useState<DayFilter>(() => loadAnalyticsState().dayFilter ?? '14')
+  const [dateFrom, setDateFrom] = useState(() => loadAnalyticsState().dateFrom ?? defaultFrom)
+  const [dateTo, setDateTo] = useState(() => loadAnalyticsState().dateTo ?? today)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      window.sessionStorage.setItem(
+        ANALYTICS_STORAGE_KEY,
+        JSON.stringify({ dayFilter, dateFrom, dateTo })
+      )
+    } catch {
+      // ignore
+    }
+  }, [dayFilter, dateFrom, dateTo])
 
   const filteredSubmissions = useMemo(
     () => filterSubmissionsByDays(submissions, dayFilter, dateFrom, dateTo),
