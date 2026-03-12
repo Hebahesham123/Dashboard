@@ -19,6 +19,7 @@ Redeploy after changing env vars.
 4. Add users in **Authentication → Users** (email + password). New users get a profile via trigger; if not, run supabase-bootstrap-profiles.sql again.  
 5. Run **supabase-status-not-reached.sql** so "Not reached (1st / 2nd / 3rd time)" count and 30‑minute cooldown are stored in the database.
 6. Run **supabase-add-reference-id.sql** to add unique reference IDs (rr-00001, rr-00002, …) for each submission.
+7. Run **supabase-add-cancelled-reason.sql** to store reason when status is set to Lost (cancelled).
 
 After that: open site → Login → Dashboard. Sign out → Login again. To make someone admin: `UPDATE profiles SET role = 'admin' WHERE email = 'their@email.com';`
 

@@ -61,5 +61,22 @@ export type SampleInquiry = {
   comment?: string | null
   not_reached_count?: number | null
   not_reached_last_at?: string | null
+  cancelled_reason?: string | null
+  cancelled_reason_other?: string | null
   created_at: string
 }
+
+export type CancelledReasonKey =
+  | 'customer_cancelled'
+  | 'not_reached'
+  | 'wrong_number'
+  | 'no_response'
+  | 'other'
+
+export const CANCELLED_REASON_OPTIONS: CancelledReasonKey[] = [
+  'customer_cancelled',
+  'not_reached',
+  'wrong_number',
+  'no_response',
+  'other',
+]

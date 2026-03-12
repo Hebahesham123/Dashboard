@@ -1,12 +1,13 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { supabase, TABLE_NAME, CREATED_AT_COLUMN, ACTIVITY_TABLE, NOT_REACHED_COOLDOWN_MS, type SampleInquiry, type SubmissionStatus, type Profile } from '@/lib/supabase'
+import { supabase, TABLE_NAME, CREATED_AT_COLUMN, ACTIVITY_TABLE, NOT_REACHED_COOLDOWN_MS, type SampleInquiry, type SubmissionStatus, type Profile, type CancelledReasonKey } from '@/lib/supabase'
 import { useLocale } from './LocaleContext'
 import { useAuth } from './AuthContext'
 import StatsCards from './StatsCards'
 import SubmissionsTable from './SubmissionsTable'
 import SubmissionDetail from './SubmissionDetail'
+import LostReasonModal from './LostReasonModal'
 import Analytics from './Analytics'
 
 const DASHBOARD_STORAGE_KEY = 'dashboard_state'
@@ -99,6 +100,7 @@ export default function Dashboard({ profile }: { profile: Profile }) {
   const [statusFilter, setStatusFilter] = useState<string>(() => getInitialState()?.statusFilter ?? '')
   const [toast, setToast] = useState<string | null>(null)
   const [pendingStatus, setPendingStatus] = useState<Record<string, SubmissionStatus>>({})
+  const [lostReasonModal, setLostReasonModal] = useState<{ id: string } | null>(null)
   const [view, setView] = useState<'submissions' | 'analytics'>(() => getInitialState()?.view ?? 'submissions')
   const restoredSelectedIdRef = useRef<string | null>(null)
 
@@ -162,7 +164,7 @@ export default function Dashboard({ profile }: { profile: Profile }) {
   )
 
   const updateStatus = useCallback(
-    async (id: string, status: SubmissionStatus) => {
+    async (id: string, status: SubmissionStatus, cancelledReason?: CancelledReasonKey | null, cancelledReasonOther?: string | null) => {
       const sub = submissions.find((s) => s.id === id)
       const oldStatus = sub?.status ?? 'new'
 
@@ -186,6 +188,10 @@ export default function Dashboard({ profile }: { profile: Profile }) {
         payload.not_reached_count = (sub?.not_reached_count ?? 0) + 1
         payload.not_reached_last_at = new Date().toISOString()
       }
+      if (status === 'cancelled') {
+        payload.cancelled_reason = cancelledReason ?? null
+        payload.cancelled_reason_other = cancelledReasonOther ?? null
+      }
 
       const { data: updatedRow, error: e } = await supabase
         .from(TABLE_NAME)
@@ -207,6 +213,8 @@ export default function Dashboard({ profile }: { profile: Profile }) {
         status,
         not_reached_count: nextRow.not_reached_count ?? nextCount ?? sub?.not_reached_count ?? null,
         not_reached_last_at: nextRow.not_reached_last_at ?? nextLastAt ?? sub?.not_reached_last_at ?? null,
+        cancelled_reason: status === 'cancelled' ? (cancelledReason ?? null) : (nextRow.cancelled_reason ?? sub?.cancelled_reason ?? null),
+        cancelled_reason_other: status === 'cancelled' ? (cancelledReasonOther ?? null) : (nextRow.cancelled_reason_other ?? sub?.cancelled_reason_other ?? null),
       }
       setSubmissions((prev) =>
         prev.map((s) => (s.id === id ? mergedRow : s))
@@ -233,6 +241,10 @@ export default function Dashboard({ profile }: { profile: Profile }) {
         })
         return
       }
+      if (statusToSave === 'cancelled') {
+        setLostReasonModal({ id })
+        return
+      }
       await updateStatus(id, statusToSave)
       setPendingStatus((prev) => {
         const next = { ...prev }
@@ -241,6 +253,19 @@ export default function Dashboard({ profile }: { profile: Profile }) {
       })
     },
     [submissions, pendingStatus, updateStatus]
+  )
+
+  const handleLostReasonConfirm = useCallback(
+    async (id: string, reason: CancelledReasonKey, reasonOther: string) => {
+      await updateStatus(id, 'cancelled', reason, reasonOther || null)
+      setPendingStatus((prev) => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+      setLostReasonModal(null)
+    },
+    [updateStatus]
   )
 
   const updateComment = useCallback(
@@ -466,6 +491,10 @@ export default function Dashboard({ profile }: { profile: Profile }) {
           submission={selected}
           onClose={() => setSelected(null)}
           onStatusChange={(id, status) => {
+            if (status === 'cancelled') {
+              setLostReasonModal({ id })
+              return
+            }
             updateStatus(id, status)
             setPendingStatus((prev) => {
               const next = { ...prev }
@@ -474,6 +503,13 @@ export default function Dashboard({ profile }: { profile: Profile }) {
             })
           }}
           onCommentChange={updateComment}
+        />
+      )}
+
+      {lostReasonModal && (
+        <LostReasonModal
+          onConfirm={(reason, reasonOther) => handleLostReasonConfirm(lostReasonModal.id, reason, reasonOther)}
+          onCancel={() => setLostReasonModal(null)}
         />
       )}
 
