@@ -169,7 +169,7 @@ function loadAnalyticsState(): Partial<{ dayFilter: DayFilter; dateFrom: string;
     const dayFilter = parsed.dayFilter as string
     const validDayFilter: DayFilter[] = ['7', '14', '30', 'all', 'custom']
     return {
-      dayFilter: validDayFilter.includes(dayFilter) ? (dayFilter as DayFilter) : undefined,
+      dayFilter: validDayFilter.includes(dayFilter as DayFilter) ? (dayFilter as DayFilter) : undefined,
       dateFrom: typeof parsed.dateFrom === 'string' ? parsed.dateFrom : undefined,
       dateTo: typeof parsed.dateTo === 'string' ? parsed.dateTo : undefined,
     }
