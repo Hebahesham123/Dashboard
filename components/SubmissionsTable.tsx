@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useCallback } from 'react'
 import type { SampleInquiry, SubmissionStatus } from '@/lib/supabase'
 import { useLocale } from './LocaleContext'
 import StatusSelect from './StatusSelect'
@@ -53,6 +54,7 @@ export default function SubmissionsTable({
   selectedId: string | null
 }) {
   const { t, locale } = useLocale()
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   const bySearch = searchQuery.trim()
     ? submissions.filter((row) =>
@@ -74,6 +76,39 @@ export default function SubmissionsTable({
   })
 
   const displayed = sorted.slice(0, limit)
+  const allDisplayedSelected = displayed.length > 0 && displayed.every((r) => selectedIds.has(r.id))
+  const someSelected = selectedIds.size > 0
+
+  const toggleRow = useCallback((id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+  const toggleAllDisplayed = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (allDisplayedSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        displayed.forEach((r) => next.delete(r.id))
+        return next
+      })
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        displayed.forEach((r) => next.add(r.id))
+        return next
+      })
+    }
+  }, [allDisplayedSelected, displayed])
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), [])
+
+  const rowsToExport = someSelected
+    ? sorted.filter((r) => selectedIds.has(r.id))
+    : sorted
 
   return (
     <div className="rounded-lg border border-gray-800 bg-[#161b22] overflow-hidden">
@@ -120,11 +155,20 @@ export default function SubmissionsTable({
             <option value={50}>50</option>
             <option value={100}>100</option>
           </select>
+          {someSelected && (
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="py-1.5 px-2 rounded-md bg-gray-700 text-gray-300 text-xs font-medium hover:bg-gray-600"
+            >
+              {t('clear_selection')} ({selectedIds.size})
+            </button>
+          )}
           {onExport && (
             <button
               type="button"
-              onClick={() => onExport(sorted)}
-              disabled={sorted.length === 0}
+              onClick={() => onExport(rowsToExport)}
+              disabled={rowsToExport.length === 0}
               className="py-1.5 px-3 rounded-md bg-emerald-600/80 text-white text-sm font-medium hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -132,7 +176,7 @@ export default function SubmissionsTable({
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              {t('export')}
+              {someSelected ? `${t('export_selected')} (${selectedIds.size})` : t('export')}
             </button>
           )}
         </div>
@@ -147,6 +191,18 @@ export default function SubmissionsTable({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-800 bg-[#0d1117]/50">
+                <th className="w-10 py-2.5 px-2" onClick={(e) => e.stopPropagation()}>
+                  <label className="flex items-center justify-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={allDisplayedSelected}
+                      onChange={() => {}}
+                      onClick={toggleAllDisplayed}
+                      className="rounded border-gray-600 bg-[#0d1117] text-blue-500 focus:ring-blue-500"
+                      aria-label={t('select_all')}
+                    />
+                  </label>
+                </th>
                 <th className="text-left py-2.5 px-2 text-xs font-medium text-gray-500 w-10">{t('serial_no')}</th>
                 <th className="text-left py-2.5 px-2 text-xs font-medium text-gray-500 w-16">{t('reference_id')}</th>
                 <th className="text-left py-2.5 px-3 text-xs font-medium text-gray-500">{t('date')}</th>
@@ -162,7 +218,7 @@ export default function SubmissionsTable({
             <tbody>
               {displayed.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center text-gray-500 text-sm">
+                  <td colSpan={11} className="py-16 text-center text-gray-500 text-sm">
                     {submissions.length === 0 ? t('no_submissions') : t('no_matching')}
                   </td>
                 </tr>
@@ -174,6 +230,18 @@ export default function SubmissionsTable({
                   onClick={() => onSelect(row)}
                   className={`border-b border-gray-800/80 cursor-pointer hover:bg-[#21262d]/60 transition-colors ${selectedId === row.id ? 'bg-[#21262d]' : ''}`}
                 >
+                  <td className="w-10 py-2.5 px-2" onClick={(e) => toggleRow(row.id, e)}>
+                    <label className="flex items-center justify-center cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(row.id)}
+                        onChange={() => {}}
+                        onClick={(e) => { e.stopPropagation(); toggleRow(row.id, e); }}
+                        className="rounded border-gray-600 bg-[#0d1117] text-blue-500 focus:ring-blue-500"
+                        aria-label={t('select_row')}
+                      />
+                    </label>
+                  </td>
                   <td className="py-2.5 px-2 text-gray-500 text-center tabular-nums w-10">
                     {serial}
                   </td>
